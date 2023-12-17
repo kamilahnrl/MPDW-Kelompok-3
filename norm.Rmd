@@ -1,0 +1,428 @@
+---
+title: "Tugas Kelompok MPDW Pertemuan 10"
+author: "Kelompok 3 MPDW"
+date: "2023-11-05"
+output: 
+  rmdformats::readthedown:
+    theme: yeti
+    toc: 6
+    toc_float: yes
+---
+
+G1401211001	Karimatu Ain  
+G1401211022	Much.Fazrin Sepranjani Fatah  
+G1401211073	Kamilah Nurul Azizah  
+G1401211087	Pingkan Febbe Fiorela Kereh  
+G1401211106	Megawati Roito Panjaitan  
+
+## Packages dan Data
+
+### Library
+
+```{r, warning=FALSE,error=FALSE,message=FALSE}
+library(ggplot2)
+library(tsibble)
+library(tseries)
+library(MASS)
+library(dplyr)
+library(TTR)
+library(forecast)
+library(lmtest)
+library(orcutt)
+library(HoRM)
+library(dLagM)
+library(dynlm)
+library(MLmetrics)
+library(car)
+library(TSA)
+library(aTSA)
+library(rugarch)
+```
+
+### Import Data
+
+Data yang digunakan merupakan data harga bawang merah (rupiah/kg) di kota Surabaya perminggu (Januari 2018 - Agustus 2023) yang bersumber dari bi.go.id 
+
+```{r, warning=FALSE,error=FALSE,message=FALSE}
+library(rio)
+data <- import("https://raw.githubusercontent.com/kamilahnrl/mpdw/main/Kelompok%203/data.xlsx")
+str(data)
+```
+
+```{r}
+# Fungsi untuk melakukan Min-Max scaling
+min_max <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+# Menggunakan fungsi Min-Max scaling pada dataset
+data <- min_max(data)
+print(data)
+```
+
+## Eksplorasi Data
+
+### Plot Data Penuh
+
+```{r, warning=FALSE,error=FALSE}
+data.ts <- ts(data$BawangMerah)
+plot.ts(data.ts, lty=1, xlab="Periode", ylab="Harga Bawang Merah", main="Plot Data Penuh Harga Bawang Merah")
+```
+Plot deret waktu di atas menunjukkan bahwa data stasioner dalam rataan, ditandai dengan data cenderung menyebar di sekitar nilai tengahnya
+
+### Plot Data Latih
+```{r}
+train <- data$BawangMerah[1:250]
+train.ts <- ts(train)
+plot.ts(train.ts, lty=1, xlab="Periode", ylab="Harga Bawang Merah", main="Plot Data Latih Harga Bawang Merah")
+```
+Berdasarkan plot data deret waktu pada data latih, terlihat bahwa data stasioner dalam rataan, ditandai dengan data cenderung menyebar di sekitar nilai tengahnya
+
+#### Plot Data Uji
+```{r}
+test <- data$BawangMerah[-c(1:250)]
+test.ts<-ts(test)
+plot.ts(test.ts, lty=1, xlab="Periode", ylab="Harga Bawang Merah", main="Plot Data Uji Harga Bawang Merah")
+```
+
+## Uji Stasioneritas Data
+
+### Plot ACF
+
+```{r, warning=FALSE,error=FALSE}
+acf(train.ts)
+```
+
+Berdasarkan plot ACF, terlihat bahwa plot ACF pada data tersebut *tails off slowly* atau menurun secara perlahan.
+
+### Uji ADF
+```{r, warning=FALSE,error=FALSE}
+tseries::adf.test(train.ts)
+```
+
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+
+Berdasarkan uji ADF tersebut, didapat *p-value* sebesar 0.01 yang lebih kecil dari taraf nyata 5% sehingga tolak $H_0$ dan menandakan bahwa data stasioner dalam rataan. 
+
+### Plot Box-Cox
+
+```{r}
+index <- seq(1:250)
+bc = boxcox(train.ts~index, lambda = seq(-2,4,by=0.01))
+#Nilai Rounded Lambda
+lambda <- bc$x[which.max(bc$y)]
+lambda
+#SK
+bc$x[bc$y > max(bc$y) - 1/2 * qchisq(.95,1)]
+```
+
+Gambar di atas menunjukkan nilai *rounded value* ($\lambda$) optimum sebesar **= -0.46** dan pada selang kepercayaan 95% nilai memiliki batas bawah **-0.81* dan batas atas **-0.13**. Selang tersebut tidak memuat nilai 1 sehingga dapat dikatakan bahwa data tidak stasioner dalam ragam.
+
+Dengan demikian, data stasioner dalam rataan tetapi tidak stasioner dalam ragam.
+
+
+## Identifikasi Model
+
+### Plot ACF
+
+```{r}
+acf(train.ts)
+```
+  
+Berdasarkan plot tersebut, terlihat bahwa plot ACF *tails off*.
+
+### Plot PACF
+
+```{r}
+pacf(train.ts)
+```
+
+Berdasarkan plot tersebut, terlihat bahwa plot PACF cenderung *cuts off* pada lag ke 1 dan plot ACF menunjukkan *tails off*, maka model tentatifnya adalah ARIMA(1,0,0) atau AR(1).
+
+
+### Plot EACF
+
+```{r}
+eacf(train.ts)
+```
+
+Identifikasi model menggunakan plot EACF dilakukan dengan melihat ujung segitiga pada pola segitiga nol. Dalam hal ini model tentatif yang terbentuk adalah ARIMA(1,0,0) dan ARIMA (2,0,0)
+
+## Pendugaan Parameter Model Tentatif
+
+### ARIMA(1,0,0)
+
+```{r}
+model1=Arima(train.ts, order=c(1,0,0),method="ML")
+summary(model1) #AIC = 4803.98
+lmtest::coeftest(model1) #seluruh parameter signifikan
+```
+
+### ARIMA(2,0,0)
+```{r}
+model2=Arima(train.ts, order=c(2,0,0),method="ML")
+summary(model2) #AIC = 4805.98
+lmtest::coeftest(model2) #ar2 tidak signifikan
+```
+
+Berdasarkan pendugaan parameter di atas, nilai AIC terkecil dimiliki oleh model ARIMA(1,0,0) dan seluruh parameternya signifikan sehingga model yang dipilih adalah model ARIMA(1,0,0).
+
+### Overfitting
+
+Tahapan selanjutnya adalah *overfitting* dilakukan dengan menaikkan orde AR(p) dan MA(q) dari model ARIMA(1,0,0) untuk melihat apakah terdapat model lain yang lebih baik dari model saat ini. Kandidat model *overfitting* adalah ARIMA(2,0,0) dan ARIMA(1,0,1).
+
+```{r}
+# ARIMA(2,0,0)
+model3=Arima(train.ts, order=c(2,0,0),method="ML")
+summary(model3) #AIC = 4805.98
+lmtest::coeftest(model3) #ar2 tidak signifikan
+
+# ARIMA(1,0,1)
+model4=Arima(train.ts, order=c(1,0,1),method="ML")
+summary(model4) #AIC = 4805.98
+lmtest::coeftest(model4) #ma1 tidak signifikan
+```
+
+Berdasarkan kedua model hasil *overfitting* di atas, model ARIMA(2,0,0) dan ARIMA(1,0,1) memiliki AIC yang lebih besar dibandingkan dengan model ARIMA(0,0,0) dan parameter kedua model tidak seluruhnya signifikan. Oleh karena itu, model ARIMA(1,0,0) akan tetap digunakan untuk melakukan peramalan.
+
+## Analisis Sisaan
+
+Model terbaik hasil identifikasi kemudian dicek asumsi sisaannya. Sisaan model ARIMA harus memenuhi asumsi normalitas, kebebasan sisaan, dan kehomogenan ragam. Diagnostik model dilakukan secara eksplorasi dan uji formal.
+
+### Eksplorasi
+```{r}
+#Eksplorasi
+sisaan<- model1$residuals
+par(mfrow=c(2,2))
+qqnorm(sisaan)
+qqline(sisaan, col = "blue", lwd = 2)
+plot(c(1:length(sisaan)),sisaan)
+acf(sisaan)
+pacf(sisaan)
+par(mfrow = c(1,1))
+```
+Berdasarkan plot kuantil-kuantil normal, secara eksplorasi ditunjukkan sisaan cenderung menyebar normal mengikuti garis $45^{\circ}$ tetapi beberapa pengamatan di kanan dan kiri tidak mengikuti garis. Kemudian dapat dilihat juga lebar pita sisaan cenderung tidak sama menandakan bahwa sisaan memiliki ragam yang tidak homogen. Plot ACF dan PACF sisaan ARIMA(1,0,0) hanya signifikan pada beberapa lag yang menandakan saling bebas. Kondisi ini akan diuji lebih lanjut dengan uji formal.
+
+```{r}
+acf(sisaan^2)
+pacf(sisaan^2)
+```
+
+
+### Uji Formal
+```{r}
+#1) Sisaan Menyebar Normal
+ks.test(sisaan,"pnorm") 
+#tak tolak H0 > sisaan menyebar normal
+```
+
+Selain dengan eksplorasi, asumsi tersebut dapat diuji menggunakan uji formal. Pada tahapan ini uji formal yang digunakan untuk normalitas adalah uji Kolmogorov-Smirnov (KS). Hipotesis pada uji KS adalah sebagai berikut.
+
+$H_0$ : Sisaan menyebar normal
+
+$H_1$ : Sisaan tidak menyebar normal
+
+Berdasarkan uji KS tersebut, didapat *p-value* sebesar <2.2e-16 yang lebih kecil dari taraf nyata 5% sehingga tolak $H_0$ dan menandakan bahwa sisaan tidak menyebar normal. 
+
+```{r}
+#2) Sisaan saling bebas/tidak ada autokorelasi
+Box.test(sisaan, type = "Ljung") 
+#tak tolak H0 > sisaan saling bebas
+```
+
+Selanjutnya akan dilakukan uji formal untuk kebebasan sisaan menggunakan uji Ljung-Box. Hipotesis yang digunakan adalah sebagai berikut.
+
+$H_0$ : Sisaan saling bebas
+
+$H_1$ : Sisaan tidak tidak saling bebas
+
+Berdasarkan uji Ljung-Box tersebut, didapat *p-value* sebesar 0.8896 yang lebih besar dari taraf nyata 5% sehingga tak tolak $H_0$ dan menandakan bahwa sisaan saling bebas.
+
+```{r}
+#3) Sisaan homogen
+Box.test((sisaan)^2, type = "Ljung") 
+#tak tolak H0 > sisaan homogen
+```
+
+Hipotesis yang digunakan untuk uji kehomogenan ragam adalah sebagai berikut.
+
+$H_0$ : Ragam sisaan homogen
+
+$H_1$ : Ragam sisaan tidak homogen
+
+Berdasarkan uji Ljung-Box terhadap sisaan kuadrat tersebut, didapat *p-value* sebesar 9.859e-06 yang lebih kecil dari taraf nyata 5% sehingga tolak $H_0$ dan menandakan bahwa ragam sisaan tidak homogen.
+
+```{r}
+#4) Nilai tengah sisaan sama dengan nol
+t.test(sisaan, mu = 0, conf.level = 0.95) 
+#tak tolak h0 > nilai tengah sisaan sama dengan 0
+```
+
+Terakhir, dengan uji-t, akan dicek apakah nilai tengah sisaan sama dengan nol. Hipotesis yang diujikan sebagai berikut.
+
+$H_0$ : nilai tengah sisaan sama dengan 0
+
+$H_1$ : nilai tengah sisaan tidak sama dengan 0
+
+Berdasarkan uji-ttersebut, didapat *p-value* sebesar 0.8297 yang lebih besar dari taraf nyata 5% sehingga tak tolak $H_0$ dan menandakan bahwa nilai tengah sisaan sama dengan nol.
+
+## Uji Efek ARCH
+```{r}
+bydArchTest1 <- ArchTest(sisaan, lags=1, demean=TRUE)
+bydArchTest1
+```
+
+```{r}
+bydArchTest2 <- ArchTest(sisaan, lags=2, demean=TRUE)
+bydArchTest2
+```
+```{r}
+bydArchTest15 <- ArchTest(sisaan, lags=15, demean=TRUE)
+bydArchTest15
+```
+```{r}
+bydArchTest20 <- ArchTest(sisaan, lags=20, demean=TRUE)
+bydArchTest20
+```
+
+p-value menunjukkan signifikan hingga lag 20, sehingga akan dicoba dengan GARCH.
+
+## GARCH
+### GARCH(1,1)
+
+AIC=19.054
+```{r, message=FALSE}
+garchSpec11 <- ugarchspec(
+  variance.model=list(model="sGARCH",
+                      garchOrder=c(1,1)),
+mean.model=list(armaOrder=c(1,0)))
+garchFit11 <- ugarchfit(spec=garchSpec11, data=train.ts)
+garchFit11
+```
+
+### GARCH(1,2)  
+AIC=19.053
+```{r, message=FALSE}
+garchSpec12 <- ugarchspec(
+  variance.model=list(model="sGARCH",
+                      garchOrder=c(1,2)),
+mean.model=list(armaOrder=c(1,0)))
+garchFit12 <- ugarchfit(spec=garchSpec12, data=train.ts)
+garchFit12
+```
+
+```{r}
+res2<-garchFit12@fit$residuals
+res2.ts<-ts(res2)
+plot.ts(res2.ts)
+```
+
+```{r}
+sisaan3<-garchFit12@fit[["residuals"]]
+ks.test(sisaan3,"pnorm")
+Box.test(sisaan3, type = "Ljung")
+Box.test((sisaan3)^2, type = "Ljung") 
+```
+
+### GARCH(2,1)  
+AIC=19.070
+```{r, message=FALSE}
+garchSpec21 <- ugarchspec(
+  variance.model=list(model="sGARCH",
+                      garchOrder=c(2,1)),
+mean.model=list(armaOrder=c(1,0)))
+garchFit21 <- ugarchfit(spec=garchSpec21, data=train.ts)
+garchFit21
+```
+
+### GARCH(2,2)  
+AIC=19.053
+```{r, message=FALSE}
+garchSpec22 <- ugarchspec(
+  variance.model=list(model="sGARCH",
+                      garchOrder=c(2,2)),
+mean.model=list(armaOrder=c(1,0)))
+garchFit22 <- ugarchfit(spec=garchSpec22, data=train.ts)
+garchFit22
+```
+
+### GARCH(1,3)  
+AIC=19.053
+```{r, message=FALSE}
+garchSpec13 <- ugarchspec(
+  variance.model=list(model="sGARCH",
+                      garchOrder=c(1,3)),
+mean.model=list(armaOrder=c(1,0)))
+garchFit13 <- ugarchfit(spec=garchSpec13, data=train.ts)
+garchFit13
+```
+
+## Forecasting
+Peramalan dilakukan untuk 45 periode ke depan.
+
+### Plot Peramalan Pada Model
+
+```{r}
+forc <- ugarchforecast(garchFit12, data = train.ts, n.ahead = 45)
+forc
+plot(forc,which=1)
+```
+
+
+```{r}
+forecastValues2 <- as.numeric(forc@forecast$seriesFor)
+```
+
+
+### Akurasi
+
+Selanjutnya, dapat dicari nilai akurasi antara hasil ramalan yang sudah ditransformasi balik dengan data uji sebagai berikut.
+
+```{r}
+perbandingan<-matrix(data=c(head(test, n=45), forecastValues2),
+                     nrow = 45, ncol = 2)
+colnames(perbandingan)<-c("Aktual","Hasil Forecast")
+perbandingan
+accuracy(ts(forecastValues2), head(test, n=45))
+```
+normalisasai ARIMA GARCH
+MAPE = 13.5529
+
+
+```{r}
+ramalan<- forecast::forecast(model1, h = 45) 
+data.ramalan <- ramalan$mean
+perbandingan<-matrix(data=c(head(test, n=45), data.ramalan),
+                     nrow = 45, ncol = 2)
+colnames(perbandingan)<-c("Aktual","Hasil Forecast")
+perbandingan
+accuracy(ts(data.ramalan), head(test, n=45))
+```
+normalisasi ARIMA
+MAPE=16.86416
+
+## Plot
+### ARIMA GARCH
+```{r}
+library(ggplot2)
+waktu<-c(1:45)
+data5<-data.frame(test,forecastValues2,waktu)
+
+plot2 <- ggplot() +
+  geom_line(data5,mapping=aes(x=waktu,y=test), color="red")+
+  geom_line(data5,mapping=aes(x=waktu,y=forecastValues2), color="blue")+
+  theme_classic()
+plot2
+```
+
+### ARIMA
+```{r}
+plot3 <- ggplot() +
+  geom_line(data5,mapping=aes(x=waktu,y=test), color="red")+
+  geom_line(data5,mapping=aes(x=waktu,y=data.ramalan), color="green")+
+  theme_classic()
+plot3
+
+```
