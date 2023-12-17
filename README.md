@@ -13,6 +13,7 @@ Disusun oleh :
 
 -Pingkan Febbe Fiorela Kereh
 
+
 Pembimbing :
 
 -Yenni Angraini
@@ -22,6 +23,7 @@ Pembimbing :
 -Adelia Putri Pangestika
 
 -Muhammad Rizky Nurhambali
+
 
 Asal Instansi :
 Department of Statistics, IPB University, Indonesia
