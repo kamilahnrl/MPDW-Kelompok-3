@@ -3,15 +3,22 @@ Berikut adalah Repository mengenai data dan pengolahannya dari papper dengan jud
 
 Disusun oleh :
 -Much Fazrin Sepranjani Fatah
+
 -Kamilah Nurul Azizah 
+
 -Karimatu Ain 
+
 -Megawati Roito Panjaitan 
+
 -Pingkan Febbe Fiorela Kereh
 
 Pembimbing :
 -Yenni Angraini
+
 -Akbar Rizki
+
 -Adelia Putri Pangestika
+
 -Muhammad Rizky Nurhambali
 
 Asal Instansi :
