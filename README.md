@@ -2,6 +2,7 @@ Berikut adalah Repository mengenai data dan pengolahannya dari papper dengan jud
 "Perbandingan Metode ARIMA, GARCH, dan LSTM dalam Peramalan Harga Bawang Merah: Studi Kasus Kota Surabaya"
 
 Disusun oleh :
+
 -Much Fazrin Sepranjani Fatah
 
 -Kamilah Nurul Azizah 
@@ -13,6 +14,7 @@ Disusun oleh :
 -Pingkan Febbe Fiorela Kereh
 
 Pembimbing :
+
 -Yenni Angraini
 
 -Akbar Rizki
