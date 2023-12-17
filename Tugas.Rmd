@@ -1,0 +1,316 @@
+---
+title: "Tugas Kelompok MPDW Pertemuan 8"
+author: "Kelompok 3 MPDW"
+date: "2023-10-30"
+output: 
+  rmdformats::readthedown:
+    theme: yeti
+    toc: 6
+    toc_float: yes
+---
+
+G1401211001	Karimatu Ain  
+G1401211022	Much.Fazrin Sepranjani Fatah  
+G1401211073	Kamilah Nurul Azizah  
+G1401211087	Pingkan Febbe Fiorela Kereh  
+G1401211106	Megawati Roito Panjaitan  
+
+## Packages dan Data
+
+### Library
+
+```{r, warning=FALSE,error=FALSE,message=FALSE}
+library(ggplot2)
+library(tsibble)
+library(tseries)
+library(MASS)
+library(dplyr)
+library(TTR)
+library(forecast)
+library(lmtest)
+library(orcutt)
+library(HoRM)
+library(dLagM)
+library(dynlm)
+library(MLmetrics)
+library(car)
+library(TSA)
+library(aTSA)
+```
+
+### Import Data
+
+Data yang digunakan merupakan data harga bawang merah (rupiah/kg) di kota Surabaya perminggu (Januari 2018 - Agustus 2023) yang bersumber dari bi.go.id 
+
+```{r, warning=FALSE,error=FALSE,message=FALSE}
+library(rio)
+data <- import("https://raw.githubusercontent.com/kamilahnrl/mpdw/main/Kelompok%203/data.xlsx")
+str(data)
+```
+
+## Eksplorasi Data
+
+### Plot Data Penuh
+
+```{r, warning=FALSE,error=FALSE}
+data.ts <- ts(data$BawangMerah)
+plot.ts(data.ts, lty=1, xlab="Periode", ylab="Harga Bawang Merah", main="Plot Data Penuh Harga Bawang Merah")
+```
+Plot deret waktu di atas menunjukkan bahwa data stasioner dalam rataan, ditandai dengan data cenderung menyebar di sekitar nilai tengahnya
+
+### Plot Data Latih
+```{r}
+train <- data$BawangMerah[1:250]
+train.ts <- ts(train)
+plot.ts(train.ts, lty=1, xlab="Periode", ylab="Harga Bawang Merah", main="Plot Data Latih Harga Bawang Merah")
+```
+Berdasarkan plot data deret waktu pada data latih, terlihat bahwa data stasioner dalam rataan, ditandai dengan data cenderung menyebar di sekitar nilai tengahnya
+
+#### Plot Data Uji
+```{r}
+test <- data$BawangMerah[-c(1:250)]
+test.ts<-ts(test)
+plot.ts(test.ts, lty=1, xlab="Periode", ylab="Harga Bawang Merah", main="Plot Data Uji Harga Bawang Merah")
+```
+
+## Uji Stasioneritas Data
+
+### Plot ACF
+
+```{r, warning=FALSE,error=FALSE}
+acf(train.ts)
+```
+
+Berdasarkan plot ACF, terlihat bahwa plot ACF pada data tersebut *tails off slowly* atau menurun secara perlahan.
+
+### Uji ADF
+```{r, warning=FALSE,error=FALSE}
+tseries::adf.test(train.ts)
+```
+
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+
+Berdasarkan uji ADF tersebut, didapat *p-value* sebesar 0.01 yang lebih kecil dari taraf nyata 5% sehingga tolak $H_0$ dan menandakan bahwa data stasioner dalam rataan. 
+
+### Plot Box-Cox
+
+```{r}
+index <- seq(1:250)
+bc = boxcox(train.ts~index, lambda = seq(-2,4,by=0.01))
+#Nilai Rounded Lambda
+lambda <- bc$x[which.max(bc$y)]
+lambda
+#SK
+bc$x[bc$y > max(bc$y) - 1/2 * qchisq(.95,1)]
+```
+
+Gambar di atas menunjukkan nilai *rounded value* ($\lambda$) optimum sebesar **= -0.46** dan pada selang kepercayaan 95% nilai memiliki batas bawah **-0.81* dan batas atas **-0.13**. Selang tersebut tidak memuat nilai 1 sehingga dapat dikatakan bahwa data tidak stasioner dalam ragam.
+
+Dengan demikian, data stasioner dalam rataan tetapi tidak stasioner dalam ragam.
+
+### Penanganan Ketidakstasioneran dalam Ragam (Tranformasi BoxCox)
+
+```{r}
+train.trans <- (train.ts)^(-0.5)
+plot.ts(train.trans, lty=1, xlab="Periode", ylab="Harga Bawang Merah", main="Plot Data Latih (Trans) Harga Bawang Merah")
+```
+### Plot BoxCox Transformasi
+
+```{r}
+index <- seq(1:250)
+bc = boxcox(train.trans~index, lambda = seq(-4,10,by=0.1))
+#Nilai Rounded Lambda
+lambda <- bc$x[which.max(bc$y)]
+lambda
+#SK
+bc$x[bc$y > max(bc$y) - 1/2 * qchisq(.95,1)]
+```
+
+SK sudah memuat nilai satu, maka stationer dalam ragam sudah tertangani.
+                                          
+## Identifikasi Model
+
+### Plot ACF
+
+```{r}
+acf(train.trans)
+```
+
+Berdasarkan plot tersebut, terlihat bahwa plot ACF *tails off*.
+
+### Plot PACF
+
+```{r}
+pacf(train.trans)
+```
+
+Berdasarkan plot tersebut, terlihat bahwa plot PACF cenderung *cuts off* pada lag ke 1 dan plot ACF menunjukkan *tails off*, maka model tentatifnya adalah ARIMA(1,0,0) atau AR(1).
+
+
+### Plot EACF
+
+```{r}
+eacf(train.trans)
+```
+
+Identifikasi model menggunakan plot EACF dilakukan dengan melihat ujung segitiga pada pola segitiga nol. Dalam hal ini model tentatif yang terbentuk adalah ARIMA(1,0,0) dan ARIMA (3,0,1)
+
+## Pendugaan Parameter Model Tentatif
+
+### ARIMA(1,0,0)
+
+```{r}
+model1=Arima(train.trans, order=c(1,0,0),method="ML")
+summary(model1) #AIC = -3350.89
+lmtest::coeftest(model1) #seluruh parameter signifikan
+```
+
+### ARIMA(3,0,1)
+```{r}
+model2=Arima(train.trans, order=c(3,0,1),method="ML")
+summary(model2) #AIC = -3352.12
+lmtest::coeftest(model2) #seluruh parameter signifikan
+```
+
+Berdasarkan pendugaan parameter di atas, nilai AIC terkecil dimiliki oleh model ARIMA(3,0,1) dan seluruh parameternya signifikan sehingga model yang dipilih adalah model ARIMA(3,0,1).
+
+### Overfitting
+
+Tahapan selanjutnya adalah *overfitting* dilakukan dengan menaikkan orde AR(p) dan MA(q) dari model ARIMA(3,0,1) untuk melihat apakah terdapat model lain yang lebih baik dari model saat ini. Kandidat model *overfitting* adalah ARIMA(4,0,1) dan ARIMA(3,0,2).
+
+```{r}
+# ARIMA(4,0,1)
+model3=Arima(train.trans, order=c(4,0,1),method="ML")
+summary(model3) #AIC = -3350.62 
+lmtest::coeftest(model3) #ar3 dan ar4 tidak signifikan
+
+# ARIMA(3,0,2)
+model4=Arima(train.trans, order=c(3,0,2),method="ML")
+summary(model4) #AIC = -3349.12
+lmtest::coeftest(model4) #hanya intercept yang signifikan
+```
+
+Berdasarkan kedua model hasil *overfitting* di atas, model ARIMA(4,0,1) dan ARIMA(3,0,2) memiliki AIC yang lebih besar dibandingkan dengan model ARIMA(3,0,1) dan parameter kedua model tidak seluruhnya signifikan. Oleh karena itu, model ARIMA(3,0,1) akan tetap digunakan untuk melakukan peramalan.
+
+## Analisis Sisaan
+
+Model terbaik hasil identifikasi kemudian dicek asumsi sisaannya. Sisaan model ARIMA harus memenuhi asumsi normalitas, kebebasan sisaan, dan kehomogenan ragam. Diagnostik model dilakukan secara eksplorasi dan uji formal.
+
+### Eksplorasi
+```{r}
+#Eksplorasi
+sisaan<- model2$residuals
+par(mfrow=c(2,2))
+qqnorm(sisaan)
+qqline(sisaan, col = "blue", lwd = 2)
+plot(c(1:length(sisaan)),sisaan)
+acf(sisaan)
+pacf(sisaan)
+par(mfrow = c(1,1))
+```
+Berdasarkan plot kuantil-kuantil normal, secara eksplorasi ditunjukkan sisaan cenderung menyebar normal mengikuti garis $45^{\circ}$ tetapi beberapa pengamatan di kanan dan kiri tidak mengikuti garis. Kemudian dapat dilihat juga lebar pita sisaan cenderung tidak sama menandakan bahwa sisaan memiliki ragam yang tidak homogen. Plot ACF dan PACF sisaan ARIMA(1,0,0) hanya signifikan pada beberapa lag yang menandakan saling bebas. Kondisi ini akan diuji lebih lanjut dengan uji formal.
+
+### Uji Formal
+```{r}
+#1) Sisaan Menyebar Normal
+ks.test(sisaan,"pnorm") 
+#tak tolak H0 > sisaan menyebar normal
+```
+
+Selain dengan eksplorasi, asumsi tersebut dapat diuji menggunakan uji formal. Pada tahapan ini uji formal yang digunakan untuk normalitas adalah uji Kolmogorov-Smirnov (KS). Hipotesis pada uji KS adalah sebagai berikut.
+
+$H_0$ : Sisaan menyebar normal
+
+$H_1$ : Sisaan tidak menyebar normal
+
+Berdasarkan uji KS tersebut, didapat *p-value* sebesar <2.2e-16 yang lebih kecil dari taraf nyata 5% sehingga tolak $H_0$ dan menandakan bahwa sisaan tidak menyebar normal. 
+
+```{r}
+#2) Sisaan saling bebas/tidak ada autokorelasi
+Box.test(sisaan, type = "Ljung") 
+#tak tolak H0 > sisaan saling bebas
+```
+
+Selanjutnya akan dilakukan uji formal untuk kebebasan sisaan menggunakan uji Ljung-Box. Hipotesis yang digunakan adalah sebagai berikut.
+
+$H_0$ : Sisaan saling bebas
+
+$H_1$ : Sisaan tidak tidak saling bebas
+
+Berdasarkan uji Ljung-Box tersebut, didapat *p-value* sebesar 0.8896 yang lebih besar dari taraf nyata 5% sehingga tak tolak $H_0$ dan menandakan bahwa sisaan saling bebas.
+
+```{r}
+#3) Sisaan homogen
+Box.test((sisaan)^2, type = "Ljung") 
+#tak tolak H0 > sisaan homogen
+```
+
+Hipotesis yang digunakan untuk uji kehomogenan ragam adalah sebagai berikut.
+
+$H_0$ : Ragam sisaan homogen
+
+$H_1$ : Ragam sisaan tidak homogen
+
+Berdasarkan uji Ljung-Box terhadap sisaan kuadrat tersebut, didapat *p-value* sebesar 9.859e-06 yang lebih kecil dari taraf nyata 5% sehingga tolak $H_0$ dan menandakan bahwa ragam sisaan tidak homogen.
+
+```{r}
+#4) Nilai tengah sisaan sama dengan nol
+t.test(sisaan, mu = 0, conf.level = 0.95) 
+#tak tolak h0 > nilai tengah sisaan sama dengan 0
+```
+
+Terakhir, dengan uji-t, akan dicek apakah nilai tengah sisaan sama dengan nol. Hipotesis yang diujikan sebagai berikut.
+
+$H_0$ : nilai tengah sisaan sama dengan 0
+
+$H_1$ : nilai tengah sisaan tidak sama dengan 0
+
+Berdasarkan uji-ttersebut, didapat *p-value* sebesar 0.8297 yang lebih besar dari taraf nyata 5% sehingga tak tolak $H_0$ dan menandakan bahwa nilai tengah sisaan sama dengan nol.
+
+
+## Forecasting
+Peramalan dilakukan untuk 45 periode ke depan.
+
+### Plot Peramalan Pada Model
+
+```{r}
+ramalan<- forecast::forecast(model2, h = 45) 
+ramalan
+data.ramalan <- ramalan$mean
+plot(ramalan)
+```
+
+Berdasarkan hasil plot ramalan di atas, dapat dilihat bahwa ramalan ARIMA(3,0,1) cenderung stabil hingga akhir periode. Selanjutnya, dapat dicari nilai akurasi antara hasil ramalan dengan data uji.
+
+### Transformasi Balik 
+
+Sebelum melakukan pengecekan akurasi terlebih dahulu dilakukan transformasi balik mengingat data latih sebelumnya ditransformasi dengan lambda -0.5 maka transformasi baliknya adalah inversenya yakni -2.
+
+```{r}
+hasil.trans <- data.ramalan^-2
+hasil.trans
+```
+
+### Akurasi
+
+Selanjutnya, dapat dicari nilai akurasi antara hasil ramalan yang sudah ditransformasi balik dengan data uji sebagai berikut.
+
+```{r}
+perbandingan<-matrix(data=c(head(test.ts, n=45), hasil.trans),
+                     nrow = 45, ncol = 2)
+colnames(perbandingan)<-c("Aktual","Hasil Forecast")
+perbandingan
+accuracy(ts(hasil.trans), head(test.ts, n=45))
+```
+
+## Simpulan
+
+Dari hasil akurasi tersebut dapat dilihat MAPE dengan nilai 20.01262 yang menggambarkan kebaikan model dalam meramalkan data dengan acuan semakin kecil MAPE semakin baik modelnya. Model yang diperoleh sudah menangani masalah kestasioneran datanya yakni stasioner dalam rataan maupun ragam dengan rataan yang sudah stasioner sedari awal dan ragam yang ditangani dengan transformasi box-cox. Hal ini dapat dimaknai bahwa datalatih dapat meramalkan dengan cukup baik data ujinya sebanyak 45 periode dengan model ARIMA(3,0,1).
+
+Berdasarkan analisis ini juga dapat kita simpulkan bahwa harga bawang merah di kota Surabaya perminggu di 5 tahun terakhir (Januari 2018 - Agustus 2023) dapat kita pergunakan untuk peramalan data selanjutnya dengan pertimbangan dan kebaikan model seperti yang sudah disebutkan sebelumnya (MAPE = 20.01262).
+
+Selanjutnya kami akan lebih menelaah lagi bagaimana menangani permasalahan analisis sisaannya yang belum memenuhi asumsi secara menyeluruh baik dari normalitas maupun homogenitas. Dari sini kami berencana mencobakan metode arch garch kedepannya dengan pertimbangan akan konsultasi terlebih dahulu kepada Asisten.
+
+Sekian untuk analisis kali ini dan terimakasih.
