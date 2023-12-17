@@ -1,6 +1,6 @@
 # MPDW-Kelompok-3
 
-[![Python3 , R](https://img.shields.io/badge/language-R-blue/Python3-red)](https://www.python.org/downloads/) 
+[![Python3](https://img.shields.io/badge/language-R-blue/Python3-red)](https://www.python.org/downloads/) 
 ![haha](https://img.shields.io/badge/status-on_progress%20%F0%9F%9A%A7-yellow)
 
 Sebuah repository mengenai data dan analisisnya dari papper dengan judul :
